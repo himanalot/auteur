@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Video Chat</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #2c3e50;
+            color: #ecf0f1;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(52, 152, 219, 0.1);
+            border-radius: 8px;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .video-chat-container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        .chat-area {
+            background: #34495e;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+
+        .sidebar {
+            background: #34495e;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #2c3e50;
+            border-radius: 6px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            background: #34495e;
+        }
+
+        .message.user {
+            background: #3498db;
+            margin-left: 20px;
+        }
+
+        .message.assistant {
+            background: #27ae60;
+            margin-right: 20px;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-area textarea {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #5a6c7d;
+            background: #2c3e50;
+            color: #ecf0f1;
+            resize: vertical;
+            min-height: 40px;
+        }
+
+        .input-area button {
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: none;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .input-area button:disabled {
+            background: #5a6c7d;
+            cursor: not-allowed;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #5a6c7d;
+            background: #2c3e50;
+            color: #ecf0f1;
+        }
+
+        .upload-area {
+            border: 2px dashed #5a6c7d;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #3498db;
+        }
+
+        .upload-area.dragover {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .file-list {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: #2c3e50;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 500;
+            font-size: 12px;
+        }
+
+        .file-details {
+            font-size: 10px;
+            color: #bdc3c7;
+        }
+
+        .remove-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .status {
+            padding: 8px;
+            background: #2c3e50;
+            border-radius: 4px;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .streaming-cursor {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @media (max-width: 768px) {
+            .video-chat-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Gemini Video Chat</h1>
+            <p>Upload videos and ask questions about visual content using advanced AI models</p>
+        </div>
+
+        <div class="video-chat-container">
+            <div class="chat-area">
+                <div id="videoChatMessages" class="messages">
+                    <div class="message assistant">
+                        <strong>Assistant:</strong> Hi! I'm a video-understanding AI assistant powered by Gemini. I can analyze videos, images, and answer questions about visual content. Upload a video file and ask me about what I see!
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <textarea id="videoChatInput" placeholder="Ask me about your video..."></textarea>
+                    <button id="sendVideoChatMessage">Send</button>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="status" id="videoChatStatus">Ready for video chat</div>
+
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="videoChatModel">AI Model:</label>
+                        <select id="videoChatModel">
+                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast, 1M context)</option>
+                            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Best quality, 2M context)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Balanced)</option>
+                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Legacy)</option>
+                            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy)</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="videoChatFrameRate">Frame Rate:</label>
+                        <select id="videoChatFrameRate">
+                            <option value="0.5">0.5 FPS (Long videos)</option>
+                            <option value="1" selected>1 FPS (Default)</option>
+                            <option value="2">2 FPS (Detailed analysis)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="upload-area" id="videoChatUploadArea">
+                    <div>📁 Click to upload or drag & drop</div>
+                    <div style="font-size: 12px; margin-top: 5px;">
+                        Videos: MP4, MOV, AVI, WMV, WebM<br>
+                        Images: JPG, PNG, WebP<br>
+                        Max size: 2GB
+                    </div>
+                    <input type="file" id="videoChatFileInput" style="display: none;" multiple accept="video/*,image/*">
+                </div>
+
+                <div id="videoChatFileList" class="file-list"></div>
+
+                <button id="clearVideoChat" style="width: 100%; padding: 10px; margin-top: 10px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Clear Chat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include required scripts -->
+    <script src="js/libs/CSInterface.js"></script>
+    <script src="js/websocket-client.js"></script>
+    <script src="js/video_chat.js"></script>
+
+    <script>
+        // Initialize video chat when page loads
+        let videoChatManager;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎥 Initializing video chat page...');
+            
+            // Initialize video chat manager
+            if (window.VideoChatManager) {
+                videoChatManager = new VideoChatManager();
+                window.videoChatManager = videoChatManager; // Make globally accessible
+                console.log('✅ Video chat manager initialized');
+            } else {
+                console.error('❌ VideoChatManager not available');
+            }
+
+            // Set up drag and drop for upload area
+            const uploadArea = document.getElementById('videoChatUploadArea');
+            const fileInput = document.getElementById('videoChatFileInput');
+
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                
+                const files = Array.from(e.dataTransfer.files);
+                files.forEach(file => {
+                    if (videoChatManager) {
+                        videoChatManager.uploadFile(file);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

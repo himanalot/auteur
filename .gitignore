@@ -1,0 +1,67 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Adobe
+*.zxp
+*.zxp.bak
+
+# Development
+.vscode/
+.idea/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Test and development files with API keys
+test_*.js
+test_*.py
+check_supermemory*.js
+check_supermemory*.py
+inspect_memory*.js
+upload_to_supermemory*.py
+set_claude_key.js
+
+# Build outputs
+dist/
+build/
+target/
+static/
+main.js
+js/main.*.js
+js/main.*.js.map
+js/tabs.js
+
+# Large video files
+*.mp4
+
+# Temporary files
+*.tmp
+*.temp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.ipynb_checkpoints/
+*.ipynb
+
+# OS generated files
+Icon?
+.AppleDouble
+.LSOverride sam2/

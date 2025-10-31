@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Graph Visualization Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+        }
+        select, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .graph-container {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f9f9f9;
+            display: flex;
+            justify-content: center;
+        }
+        #graphCanvas {
+            background: white;
+            cursor: crosshair;
+        }
+        .stats {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .stat-item {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+            display: flex;
+            justify-content: space-between;
+        }
+        .node-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 6px;
+            display: none;
+        }
+        .node-info.visible {
+            display: block;
+        }
+        .legend {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 8px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕸️ Project Graph Visualization Test</h1>
+        <p>Interactive test of the After Effects project knowledge graph visualization</p>
+
+        <div class="controls">
+            <button onclick="generateSampleGraph()">Generate Sample Graph</button>
+            
+            <div class="control-group">
+                <label>Layout:</label>
+                <select id="layoutSelect" onchange="updateLayout()">
+                    <option value="circular">Circular</option>
+                    <option value="hierarchical">Hierarchical</option>
+                    <option value="force">Force-Directed</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Filter:</label>
+                <select id="filterSelect" onchange="updateFilter()">
+                    <option value="all">All Types</option>
+                    <option value="Project">Project</option>
+                    <option value="Composition">Composition</option>
+                    <option value="TextLayer">Text Layer</option>
+                    <option value="AVLayer">AV Layer</option>
+                    <option value="Effect">Effect</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="graph-container">
+            <canvas id="graphCanvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="stats" id="stats"></div>
+
+        <div class="node-info" id="nodeInfo">
+            <h3>Selected Node</h3>
+            <div id="nodeDetails"></div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ff6b6b;"></div>
+                <span>Project</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #4ecdc4;"></div>
+                <span>Composition</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f9ca24;"></div>
+                <span>Text Layer</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #a0e7e5;"></div>
+                <span>AV Layer</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fd79a8;"></div>
+                <span>Effect</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fdcb6e;"></div>
+                <span>Property</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let graphData = null;
+        let selectedNode = null;
+        let canvas = null;
+        let ctx = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            canvas = document.getElementById('graphCanvas');
+            ctx = canvas.getContext('2d');
+            canvas.addEventListener('click', handleCanvasClick);
+            generateSampleGraph();
+        });
+
+        function generateSampleGraph() {
+            // Generate sample AE project graph data
+            graphData = {
+                nodes: [
+                    { id: 'project_1', type: 'Project', properties: { name: 'My Project' } },
+                    { id: 'comp_1', type: 'Composition', properties: { name: 'Main Comp', width: 1920, height: 1080 } },
+                    { id: 'comp_2', type: 'Composition', properties: { name: 'Intro Comp', width: 1920, height: 1080 } },
+                    { id: 'layer_1', type: 'TextLayer', properties: { name: 'Title Text', text: 'Hello World' } },
+                    { id: 'layer_2', type: 'AVLayer', properties: { name: 'Background Video' } },
+                    { id: 'layer_3', type: 'TextLayer', properties: { name: 'Subtitle' } },
+                    { id: 'layer_4', type: 'AVLayer', properties: { name: 'Logo' } },
+                    { id: 'effect_1', type: 'Effect', properties: { name: 'Gaussian Blur', match_name: 'ADBE Gaussian Blur' } },
+                    { id: 'effect_2', type: 'Effect', properties: { name: 'Color Correction', match_name: 'ADBE Color Correction' } },
+                    { id: 'prop_1', type: 'Property', properties: { name: 'Position', value: [960, 540] } },
+                    { id: 'prop_2', type: 'Property', properties: { name: 'Opacity', value: 100 } }
+                ],
+                edges: [
+                    { from: 'project_1', to: 'comp_1', type: 'CONTAINS' },
+                    { from: 'project_1', to: 'comp_2', type: 'CONTAINS' },
+                    { from: 'comp_1', to: 'layer_1', type: 'CONTAINS' },
+                    { from: 'comp_1', to: 'layer_2', type: 'CONTAINS' },
+                    { from: 'comp_2', to: 'layer_3', type: 'CONTAINS' },
+                    { from: 'comp_2', to: 'layer_4', type: 'CONTAINS' },
+                    { from: 'layer_1', to: 'effect_1', type: 'CONTAINS' },
+                    { from: 'layer_2', to: 'effect_2', type: 'CONTAINS' },
+                    { from: 'layer_1', to: 'prop_1', type: 'CONTAINS' },
+                    { from: 'layer_1', to: 'prop_2', type: 'CONTAINS' }
+                ]
+            };
+
+            updateStats();
+            drawGraph();
+        }
+
+        function updateStats() {
+            const statsEl = document.getElementById('stats');
+            const nodeTypes = {};
+            graphData.nodes.forEach(node => {
+                nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1;
+            });
+
+            statsEl.innerHTML = `
+                <div class="stat-item">
+                    <span>Total Nodes</span>
+                    <span>${graphData.nodes.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span>Total Edges</span>
+                    <span>${graphData.edges.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span>Node Types</span>
+                    <span>${Object.keys(nodeTypes).length}</span>
+                </div>
+                <div class="stat-item">
+                    <span>Compositions</span>
+                    <span>${nodeTypes.Composition || 0}</span>
+                </div>
+            `;
+        }
+
+        function drawGraph() {
+            const layout = document.getElementById('layoutSelect').value;
+            const filter = document.getElementById('filterSelect').value;
+            
+            // Filter nodes
+            let filteredNodes = graphData.nodes;
+            if (filter !== 'all') {
+                filteredNodes = graphData.nodes.filter(node => node.type === filter);
+            }
+
+            // Calculate positions
+            const positions = calculateLayout(filteredNodes, layout);
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw edges
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            graphData.edges.forEach(edge => {
+                const fromPos = positions[edge.from];
+                const toPos = positions[edge.to];
+                
+                if (fromPos && toPos) {
+                    ctx.beginPath();
+                    ctx.moveTo(fromPos.x, fromPos.y);
+                    ctx.lineTo(toPos.x, toPos.y);
+                    ctx.stroke();
+
+                    // Draw edge label
+                    const midX = (fromPos.x + toPos.x) / 2;
+                    const midY = (fromPos.y + toPos.y) / 2;
+                    ctx.fillStyle = '#999';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(edge.type, midX, midY);
+                }
+            });
+
+            // Draw nodes
+            filteredNodes.forEach(node => {
+                const pos = positions[node.id];
+                if (!pos) return;
+
+                const radius = getNodeRadius(node.type);
+                const color = getNodeColor(node.type);
+                
+                // Draw node circle
+                ctx.fillStyle = node.selected ? '#ff0000' : color;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw node border
+                ctx.strokeStyle = node.selected ? '#ff0000' : '#333';
+                ctx.lineWidth = node.selected ? 3 : 1;
+                ctx.stroke();
+                
+                // Draw node label
+                ctx.fillStyle = '#333';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    node.properties.name || node.id, 
+                    pos.x, 
+                    pos.y + radius + 15
+                );
+            });
+        }
+
+        function calculateLayout(nodes, layout) {
+            const positions = {};
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            switch (layout) {
+                case 'circular':
+                    const radius = Math.min(canvas.width, canvas.height) * 0.3;
+                    nodes.forEach((node, index) => {
+                        const angle = (index / nodes.length) * 2 * Math.PI;
+                        positions[node.id] = {
+                            x: centerX + radius * Math.cos(angle),
+                            y: centerY + radius * Math.sin(angle)
+                        };
+                    });
+                    break;
+
+                case 'hierarchical':
+                    const levels = {
+                        'Project': [],
+                        'Composition': [],
+                        'Layer': [],
+                        'Other': []
+                    };
+                    
+                    nodes.forEach(node => {
+                        if (node.type === 'Project') levels.Project.push(node);
+                        else if (node.type === 'Composition') levels.Composition.push(node);
+                        else if (node.type.includes('Layer')) levels.Layer.push(node);
+                        else levels.Other.push(node);
+                    });
+
+                    const levelKeys = Object.keys(levels).filter(key => levels[key].length > 0);
+                    const levelHeight = canvas.height / (levelKeys.length + 1);
+
+                    levelKeys.forEach((levelKey, levelIndex) => {
+                        const levelNodes = levels[levelKey];
+                        const nodeWidth = canvas.width / (levelNodes.length + 1);
+
+                        levelNodes.forEach((node, nodeIndex) => {
+                            positions[node.id] = {
+                                x: (nodeIndex + 1) * nodeWidth,
+                                y: (levelIndex + 1) * levelHeight
+                            };
+                        });
+                    });
+                    break;
+
+                default: // force-directed
+                    // Simple random positioning for force layout
+                    nodes.forEach(node => {
+                        positions[node.id] = {
+                            x: 100 + Math.random() * (canvas.width - 200),
+                            y: 100 + Math.random() * (canvas.height - 200)
+                        };
+                    });
+                    break;
+            }
+
+            return positions;
+        }
+
+        function getNodeRadius(type) {
+            switch (type) {
+                case 'Project': return 25;
+                case 'Composition': return 20;
+                case 'TextLayer':
+                case 'AVLayer': return 15;
+                case 'Effect': return 12;
+                default: return 10;
+            }
+        }
+
+        function getNodeColor(type) {
+            switch (type) {
+                case 'Project': return '#ff6b6b';
+                case 'Composition': return '#4ecdc4';
+                case 'TextLayer': return '#f9ca24';
+                case 'AVLayer': return '#a0e7e5';
+                case 'Effect': return '#fd79a8';
+                case 'Property': return '#fdcb6e';
+                default: return '#b2bec3';
+            }
+        }
+
+        function handleCanvasClick(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const filter = document.getElementById('filterSelect').value;
+            let filteredNodes = graphData.nodes;
+            if (filter !== 'all') {
+                filteredNodes = graphData.nodes.filter(node => node.type === filter);
+            }
+
+            const layout = document.getElementById('layoutSelect').value;
+            const positions = calculateLayout(filteredNodes, layout);
+
+            // Find clicked node
+            const clickedNode = filteredNodes.find(node => {
+                const pos = positions[node.id];
+                if (!pos) return false;
+                const radius = getNodeRadius(node.type);
+                const distance = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+                return distance <= radius;
+            });
+
+            // Clear previous selection
+            graphData.nodes.forEach(node => node.selected = false);
+
+            if (clickedNode) {
+                clickedNode.selected = true;
+                selectedNode = clickedNode;
+                showNodeInfo(clickedNode);
+            } else {
+                selectedNode = null;
+                hideNodeInfo();
+            }
+
+            drawGraph();
+        }
+
+        function showNodeInfo(node) {
+            const nodeInfo = document.getElementById('nodeInfo');
+            const nodeDetails = document.getElementById('nodeDetails');
+            
+            nodeDetails.innerHTML = `
+                <p><strong>ID:</strong> ${node.id}</p>
+                <p><strong>Type:</strong> ${node.type}</p>
+                <p><strong>Name:</strong> ${node.properties.name || 'Unnamed'}</p>
+                <p><strong>Properties:</strong></p>
+                <pre style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 12px;">${JSON.stringify(node.properties, null, 2)}</pre>
+            `;
+            
+            nodeInfo.classList.add('visible');
+        }
+
+        function hideNodeInfo() {
+            document.getElementById('nodeInfo').classList.remove('visible');
+        }
+
+        function updateLayout() {
+            drawGraph();
+        }
+
+        function updateFilter() {
+            drawGraph();
+        }
+    </script>
+</body>
+</html>

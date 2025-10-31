@@ -1,0 +1,87 @@
+// HelixDB Schema for After Effects Project Context
+// Separate from documentation RAG - this is for PROJECT navigation
+
+N::Project {
+    name: String,
+    duration: F64,
+    frameRate: F64,
+    width: I64,
+    height: I64
+}
+
+N::Composition {
+    name: String,
+    duration: F64,
+    frameRate: F64,
+    width: I64,
+    height: I64,
+    layerCount: I64
+}
+
+N::Layer {
+    name: String,
+    index: I64,
+    type: String
+}
+
+N::TextLayer {
+    name: String,
+    index: I64,
+    text: String,
+    fontSize: F64,
+    fontFamily: String
+}
+
+N::AVLayer {
+    name: String,
+    index: I64,
+    source_id: String,
+    enabled: Bool,
+    inPoint: F64,
+    outPoint: F64
+}
+
+N::FootageItem {
+    name: String,
+    file: String,
+    duration: F64,
+    width: I64,
+    height: I64
+}
+
+E::CONTAINS {
+    From: Project,
+    To: Composition,
+    Properties: {
+        relationship: String,
+        item_type: String
+    }
+}
+
+E::CONTAINS {
+    From: Composition,
+    To: Layer,
+    Properties: {
+        relationship: String,
+        layer_index: I64,
+        layer_type: String
+    }
+}
+
+E::USES {
+    From: Layer,
+    To: FootageItem,
+    Properties: {
+        relationship: String,
+        usage_type: String
+    }
+}
+
+E::DEPENDS_ON {
+    From: Composition,
+    To: Composition,
+    Properties: {
+        relationship: String,
+        dependency_type: String
+    }
+}

@@ -1,0 +1,96 @@
+{
+  "name": "maximise-ae-tools",
+  "version": "1.0.0",
+  "description": "Professional After Effects extension with comprehensive tools for composition management, layer manipulation, animation, text handling, and export utilities",
+  "main": "index.html",
+  "homepage": "./",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build && npm run build-cep && npm run validate",
+    "build-cep": "webpack --config webpack.cep.js",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "validate": "eslint jsx/**/*.jsx",
+    "watch": "webpack --config webpack.cep.js --watch",
+    "lint-fix": "eslint jsx/**/*.jsx --fix",
+    "install-dev": "cp -r . '/Users/$USER/Library/Application Support/Adobe/CEP/extensions/Maximise AE Tools/'",
+    "package": "echo 'Use Adobe ZXP Packager or similar tool to create .zxp file'",
+    "debug": "defaults write com.adobe.CSXS.12 PlayerDebugMode 1 && defaults write com.adobe.CSXS.11 PlayerDebugMode 1 && defaults write com.adobe.CSXS.10 PlayerDebugMode 1 && defaults write com.adobe.CSXS.13 PlayerDebugMode 1"
+  },
+  "keywords": [
+    "after-effects",
+    "cep",
+    "extension",
+    "animation",
+    "video",
+    "motion-graphics",
+    "adobe",
+    "productivity",
+    "workflow",
+    "react"
+  ],
+  "author": "Maximise",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bymaximise/maximise-ae-tools"
+  },
+  "bugs": {
+    "url": "https://github.com/bymaximise/maximise-ae-tools/issues"
+  },
+  "engines": {
+    "aftereffects": ">=22.0.0"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.5.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "^16.18.126",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/react-router-dom": "^5.3.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-redux": "^9.1.2",
+    "react-router-dom": "^6.21.0",
+    "react-scripts": "5.0.1",
+    "typescript": "^4.9.5",
+    "web-vitals": "^2.1.4"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-env": "^7.28.0",
+    "babel-loader": "^10.0.0",
+    "eslint-plugin-extendscript-plus": "^0.0.2",
+    "ts-loader": "^9.5.2",
+    "types-for-adobe": "^7.2.5"
+  },
+  "extensionInfo": {
+    "id": "com.bymaximise.aeextension",
+    "version": "1.0.0",
+    "name": "Maximise AE Tools",
+    "author": "Maximise",
+    "cepVersion": "12.0",
+    "hosts": [
+      {
+        "name": "AEFT",
+        "version": "[22.0,99.9]"
+      }
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

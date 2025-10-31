@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Streaming Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .streaming-cursor {
+            animation: streamingBlink 1s infinite;
+            color: #3498db;
+            font-weight: bold;
+        }
+        @keyframes streamingBlink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .test-message {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Streaming Test</h1>
+    <div class="test-message">
+        <strong>📖 AE Docs Assistant:</strong>
+        <div id="streaming-content">
+            <span class="streaming-cursor">▌</span>
+        </div>
+    </div>
+    
+    <button onclick="simulateStreaming()">Test Streaming</button>
+    
+    <script>
+        function simulateStreaming() {
+            const content = document.getElementById('streaming-content');
+            const messages = [
+                "Hello",
+                "Hello, I'm",
+                "Hello, I'm here",
+                "Hello, I'm here to",
+                "Hello, I'm here to help",
+                "Hello, I'm here to help with",
+                "Hello, I'm here to help with After",
+                "Hello, I'm here to help with After Effects",
+                "Hello, I'm here to help with After Effects scripting!"
+            ];
+            
+            let index = 0;
+            const interval = setInterval(() => {
+                if (index < messages.length) {
+                    content.innerHTML = messages[index] + '<span class="streaming-cursor">▌</span>';
+                    index++;
+                } else {
+                    content.innerHTML = messages[messages.length - 1];
+                    clearInterval(interval);
+                }
+            }, 200);
+        }
+    </script>
+</body>
+</html>

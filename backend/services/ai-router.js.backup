@@ -1,0 +1,865 @@
+const ClaudeService = require('./claude');
+const GeminiService = require('./gemini');
+const RAGService = require('./rag');
+
+class AIRouterService {
+  constructor() {
+    this.claudeService = new ClaudeService();
+    this.geminiService = new GeminiService();
+    this.ragService = new RAGService();
+    
+    this.maxIterations = 1;
+    this.maxToolCallsPerIteration = 5;
+    this.maxTotalToolCalls = 10;
+    this._shouldContinueAutonomous = false;
+  }
+
+  /**
+   * Handle autonomous chat as one continuous conversation flow
+   * Continues until Claude stops making tool calls naturally
+   */
+  async handleAutonomousChat(message, options = {}) {
+    const {
+      model = 'claude',
+      conversation = [],
+      onContentDelta = () => {},
+      onToolCall = () => {},
+      onToolResult = () => {},
+      onComplete = () => {},
+      onError = () => {}
+    } = options;
+
+    try {
+      console.log(`🤖 Autonomous Chat: Using simple chat pattern (autonomous = simple for now)`);
+      
+      // For now, just use the working simple chat pattern
+      // The only difference is that autonomous "could" continue if Claude makes more tool calls
+      // But for simplicity, let's start with just the working pattern
+      return await this.handleSimpleChat(message, options);
+      
+    } catch (error) {
+      console.error('❌ Autonomous Chat error:', error);
+      onError(error);
+    }
+  }
+
+  /**
+   * Handle simple (non-autonomous) chat with the original working pattern
+   */
+  async handleSimpleChat(message, options = {}) {
+    const {
+      model = 'claude',
+      conversation = [],
+      onContentDelta = () => {},
+      onToolCall = () => {},
+      onToolResult = () => {},
+      onComplete = () => {},
+      onError = () => {}
+    } = options;
+
+    try {
+      console.log(`📝 Simple Chat: Starting with ${model}`);
+      
+      // Build conversation context
+      const conversationPrompt = this.buildConversation(message, [], 1);
+      
+      let toolCallsData = [];
+      let fullResponse = '';
+      
+      // Single iteration for simple chat
+      const decision = await this.callAIWithTools(conversationPrompt, {
+        model,
+        onContentDelta: (delta, full) => {
+          fullResponse = full;
+          onContentDelta(delta, full);
+        },
+        onToolCall: (toolCalls) => {
+          onToolCall(toolCalls);
+        }
+      });
+      
+      if (!decision.success) {
+        onError(new Error(decision.error));
+        return;
+      }
+      
+      // If there's content but no tool calls, we're done
+      if (decision.content && !decision.toolCalls?.length) {
+        onComplete({
+          success: true,
+          content: decision.content,
+          toolCalls: []
+        });
+        return;
+      }
+      
+      // Execute tool calls if any
+      if (decision.toolCalls && decision.toolCalls.length > 0) {
+        const toolResults = [];
+        
+        for (let i = 0; i < Math.min(decision.toolCalls.length, 5); i++) {
+          const toolCall = decision.toolCalls[i];
+          console.log(`📝 Simple Chat: Executing tool: ${toolCall.name} with query: ${toolCall.query}`);
+          
+          // Execute tool call
+          const toolResult = await this.ragService.executeToolCall(toolCall);
+          console.log('📝 Simple Chat: Tool result:', {
+            success: toolResult.success,
+            resultCount: toolResult.resultCount,
+            error: toolResult.error
+          });
+          
+          // Add ID from AI's tool call for proper response
+          toolResult.id = toolCall.id;
+          toolResults.push(toolResult);
+          
+          // Notify callback
+          onToolResult(toolCall, toolResult);
+          
+          // Add to tool calls data
+          toolCallsData.push({
+            iteration: 1,
+            toolCall,
+            result: toolResult,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Process tool results (original working pattern)
+        if (toolResults.length > 0) {
+          console.log('📝 Simple Chat: Processing tool results...');
+          
+          // Build message history for Claude tool results call
+          const assistantContent = [];
+          
+          // Add any text content from the assistant's response before tool calls
+          if (decision.content && decision.content.trim()) {
+            assistantContent.push({
+              type: 'text',
+              text: decision.content.trim()
+            });
+          }
+          
+          // Add the tool calls
+          decision.toolCalls.forEach(tc => {
+            assistantContent.push({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.name,
+              input: { query: tc.query }
+            });
+          });
+          
+          const originalMessages = [{
+            role: 'user',
+            content: message
+          }, {
+            role: 'assistant',
+            content: assistantContent
+          }];
+          
+          const followUpResult = await this.claudeService.streamWithToolResults(originalMessages, toolResults, {
+            onContentDelta: (delta, full) => {
+              // Combine with existing content if needed
+              const displayContent = fullResponse.trim() ? 
+                fullResponse + '\n\n' + full : 
+                full;
+              onContentDelta(delta, displayContent);
+            },
+            onComplete: (result) => {
+              const finalContent = fullResponse.trim() ? 
+                fullResponse + '\n\n' + result.content : 
+                result.content;
+              
+              onComplete({
+                success: true,
+                content: finalContent,
+                toolCalls: toolCallsData
+              });
+            },
+            onError: onError
+          });
+          
+          return; // Claude handles the completion
+        }
+      }
+      
+      // Fallback completion
+      onComplete({
+        success: true,
+        content: fullResponse || 'I completed the task but did not generate a specific response.',
+        toolCalls: toolCallsData
+      });
+      
+    } catch (error) {
+      console.error('❌ Simple Chat error:', error);
+      onError(error);
+    }
+  }
+
+  /**
+   * Main entry point for chat conversations
+   */
+  async streamChat(message, options = {}) {
+    const {
+      model = 'claude',
+      conversation = [],
+      onContentDelta = () => {},
+      onToolCall = () => {},
+      onToolResult = () => {},
+      onComplete = () => {},
+      onError = () => {}
+    } = options;
+
+    try {
+      console.log(`🎯 AI Router: Starting chat with ${model}`);
+      console.log(`🎯 AI Router: Message preview: "${message.substring(0, 100)}..."`);
+      
+      // Check if this is an autonomous agent request
+      const isAutonomousMode = message.includes('AUTONOMOUS AGENT MODE:');
+      console.log(`🎯 AI Router: Contains 'AUTONOMOUS AGENT MODE:': ${isAutonomousMode}`);
+      
+      if (isAutonomousMode) {
+        console.log('🤖 AUTONOMOUS MODE DETECTED - Using natural conversation flow');
+        // Use the simple working approach but allow continuation
+        return await this.handleAutonomousChat(message, options);
+      } else {
+        console.log('📝 Regular chat mode detected - using simple single iteration');
+        this.maxIterations = 1; // Reset to simple mode
+        this.maxToolCallsPerIteration = 5; // Reset to simple mode
+        
+        // For regular chat, use the simple working pattern
+        return await this.handleSimpleChat(message, options);
+      }
+      
+    } catch (error) {
+      console.error('❌ AI Router error:', error);
+      onError(error);
+    }
+  }
+      let conversationHistory = []; // Track full conversation for context building
+      
+      let toolCallsData = [];
+      let fullResponse = '';
+      let accumulatedContent = ''; // Track all content across iterations
+      let totalToolCalls = 0; // Initialize total tool calls counter
+      
+      // NEW: Track iteration context to build Claude's memory
+      let iterationContext = {
+        toolCallHistory: [], // All previous tool calls and their results
+        currentIteration: 0,
+        totalSearches: 0
+      };
+      
+      // Run the streaming agent approach similar to frontend
+      for (let iteration = 1; iteration <= this.maxIterations; iteration++) {
+        console.log(`🔄 AGENT ITERATION ${iteration}/${this.maxIterations}`);
+        console.log(`🔄 Tool calls this iteration: 0/${this.maxToolCallsPerIteration}`);
+        console.log(`🔄 Total tool calls so far: ${totalToolCalls}/${this.maxTotalToolCalls}`);
+        
+        // Create iteration-aware prompt
+        let promptToUse;
+        if (iteration === 1) {
+          promptToUse = conversationPrompt;
+        } else {
+          // Add iteration context and previous tool call info
+          const previousSearches = toolCallsData.map(tc => tc.query).join(', ');
+          promptToUse = `${conversationPrompt}
+
+ITERATION CONTEXT: This is your ${iteration === 2 ? '2nd' : iteration === 3 ? '3rd' : `${iteration}th`} iteration. 
+Previous searches: ${previousSearches}
+Continue with your analysis or provide final answer.`;
+        }
+          
+        console.log(`🤖 ITERATION ${iteration}: Using ${iteration === 1 ? 'initial prompt' : 'iteration-aware prompt'}`);
+          
+        const decision = await this.callAIWithTools(promptToUse, {
+          model,
+          onContentDelta: (delta, full) => {
+            fullResponse = full;
+            console.log(`📝 Content delta (${delta.length} chars): ${delta.substring(0, 100)}...`);
+            onContentDelta(delta, full);
+          },
+          onToolCall: (toolCalls) => {
+            console.log(`🔧 TOOL CALLS REQUESTED: ${toolCalls.length} tools`);
+            toolCalls.forEach((tc, i) => {
+              console.log(`🔧 Tool ${i + 1}: ${tc.function?.name || tc.name} - Query: ${tc.function?.arguments?.query || tc.query || 'No query'}`);
+            });
+            onToolCall(toolCalls);
+          }
+        });
+        
+        if (!decision.success) {
+          console.log(`❌ DECISION FAILED: ${decision.error}`);
+          onError(new Error(decision.error));
+          return;
+        }
+        
+        console.log(`✅ DECISION SUCCESS - Content: ${decision.content ? decision.content.length : 0} chars, Tool calls: ${decision.toolCalls?.length || 0}`);
+        
+        // Check if this is autonomous mode (using outer scope variable)
+        
+        // If there's content but no tool calls, check if we should continue (autonomous mode) or finish
+        if (decision.content && !decision.toolCalls?.length) {
+          if (isAutonomousMode && iteration < this.maxIterations) {
+            console.log(`🤖 AUTONOMOUS MODE: Content received but no tool calls at iteration ${iteration}/${this.maxIterations}`);
+            console.log(`🤖 Current response: ${decision.content.substring(0, 200)}...`);
+            
+            // In autonomous mode, give the AI another chance to continue naturally
+            console.log(`🤖 AUTONOMOUS MODE: Giving AI another chance to decide whether to continue`);
+            
+            // Accumulate the content
+            accumulatedContent = accumulatedContent ? 
+              accumulatedContent + '\n\n' + decision.content : 
+              decision.content;
+            
+            // Continue to next iteration - let AI decide what to do next
+            continue;
+          }
+          
+          console.log(`✅ FINISHING: Content without tool calls`);
+          onComplete({
+            success: true,
+            content: decision.content,
+            toolCalls: []
+          });
+          return;
+        }
+        
+        // Execute tool calls if any
+        if (decision.toolCalls && decision.toolCalls.length > 0) {
+          let totalToolCalls = toolCallsData.length;
+          const toolResults = [];
+          
+          console.log(`🔧 EXECUTING ${decision.toolCalls.length} TOOL CALLS (max per iteration: ${this.maxToolCallsPerIteration})`);
+          
+          for (let i = 0; i < Math.min(decision.toolCalls.length, this.maxToolCallsPerIteration); i++) {
+            if (totalToolCalls >= this.maxTotalToolCalls) {
+              console.log(`⚠️  Breaking: Total tool calls limit reached (${this.maxTotalToolCalls})`);
+              break;
+            }
+            
+            const toolCall = decision.toolCalls[i];
+            console.log(`🔧 TOOL ${i + 1}/${decision.toolCalls.length}: ${toolCall.name} with query: "${toolCall.query}"`);
+            
+            // Execute tool call
+            const toolResult = await this.ragService.executeToolCall(toolCall);
+            console.log(`✅ TOOL ${i + 1} RESULT:`, {
+              success: toolResult.success,
+              resultCount: toolResult.resultCount,
+              error: toolResult.error,
+              hasDocumentation: !!toolResult.documentation,
+              documentationLength: toolResult.documentation ? toolResult.documentation.length : 0,
+              documentationPreview: toolResult.documentation ? toolResult.documentation.substring(0, 200) + '...' : 'No documentation',
+              resultPreview: toolResult.result ? toolResult.result.substring(0, 100) + '...' : 'No result'
+            });
+            
+            // Add ID from AI's tool call for proper response
+            toolResult.id = toolCall.id;
+            toolResults.push(toolResult);
+            
+            // Notify callback
+            onToolResult(toolCall, toolResult);
+            
+            // Add to tool calls data
+            toolCallsData.push({
+              iteration,
+              toolCall,
+              result: toolResult,
+              timestamp: new Date().toISOString()
+            });
+            
+            // NEW: Add to iteration context for Claude's memory
+            iterationContext.toolCallHistory.push({
+              query: toolCall.query,
+              success: toolResult.success,
+              resultCount: toolResult.resultCount || 0,
+              error: toolResult.error,
+              iteration: iteration,
+              timestamp: new Date().toISOString()
+            });
+            iterationContext.totalSearches++;
+            
+            console.log(`🧠 Added to context: "${toolCall.query}" (${iterationContext.toolCallHistory.length} total searches)`);
+            
+            totalToolCalls++;
+          }
+          
+          // After executing tools, we need to process the results
+          if (toolResults.length > 0) {
+            console.log(`🔄 PROCESSING ${toolResults.length} TOOL RESULTS FOR ITERATION ${iteration}...`);
+            console.log(`🔄 Current full response length: ${fullResponse.length}`);
+            console.log(`🔄 Will continue to iteration: ${iteration < this.maxIterations ? iteration + 1 : 'FINAL'}`);
+            
+            // Debug the tool results
+            toolResults.forEach((result, i) => {
+              console.log(`📊 Tool result ${i + 1}: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.resultCount || 0} items`);
+            });
+            
+            // Check if we're using Claude (supports tool results format)
+            const isUsingClaude = model === 'claude' || (decision.toolCalls && decision.toolCalls[0]?.id);
+            
+            if (isUsingClaude) {
+              // Build message history for Claude tool results call
+              const assistantContent = [];
+              
+              // Add any text content from the assistant's response before tool calls
+              if (decision.content && decision.content.trim()) {
+                assistantContent.push({
+                  type: 'text',
+                  text: decision.content.trim()
+                });
+              }
+              
+              // Add the tool calls
+              decision.toolCalls.forEach(tc => {
+                assistantContent.push({
+                  type: 'tool_use',
+                  id: tc.id,
+                  name: tc.name,
+                  input: { query: tc.query }
+                });
+              });
+              
+              const originalMessages = [{
+                role: 'user',
+                content: message
+              }, {
+                role: 'assistant',
+                content: assistantContent
+              }];
+              
+              console.log(`🔧 Sending to Claude for tool results:`, {
+                messageCount: originalMessages.length,
+                toolResultsCount: toolResults.length,
+                assistantContentBlocks: assistantContent.length,
+                toolResultsPreview: toolResults.map(tr => ({
+                  success: tr.success,
+                  resultCount: tr.resultCount,
+                  hasContent: !!tr.documentation,
+                  documentationLength: tr.documentation ? tr.documentation.length : 0
+                }))
+              });
+              
+              // DEBUG: Log the COMPLETE context being sent to Claude
+              const fullClaudeContext = {
+                messages: originalMessages,
+                toolResults: toolResults.map(tr => ({
+                  id: tr.id,
+                  success: tr.success,
+                  documentation: tr.documentation || 'NO DOCUMENTATION',
+                  documentationLength: tr.documentation ? tr.documentation.length : 0,
+                  sources: tr.sources || [],
+                  query: tr.query
+                }))
+              };
+              
+              console.log(`🔍 FULL CLAUDE CONTEXT:`, {
+                messageCount: originalMessages.length,
+                toolResultsCount: toolResults.length,
+                fullContext: fullClaudeContext
+              });
+              
+              // Send this full context to the frontend for debugging
+              if (typeof onToolResult === 'function') {
+                onToolResult({
+                  name: 'claude_full_context',
+                  id: 'debug_context_' + Date.now()
+                }, {
+                  success: true,
+                  type: 'claude_context',
+                  fullContext: fullClaudeContext,
+                  timestamp: new Date().toISOString()
+                });
+              }
+              
+              // Debug info only in console, not sent to UI
+              console.log(`🔧 Sending tool results to Claude: ${toolResults.length} results`);
+              
+              // Store the response from tool results to check if we need to continue
+              let shouldContinueLoop = false;
+              let finalResponseContent = '';
+              
+              // Update iteration context
+              iterationContext.currentIteration = iteration;
+              
+              // CLAUDE DOCS APPROACH: Build proper conversation history
+              const followUpResult = await this.claudeService.streamWithToolResults(originalMessages, toolResults, {
+                onContentDelta: (delta, full) => {
+                  console.log(`🔧 Tool results content delta: "${delta.substring(0, 100)}..." (total: ${full.length} chars)`);
+                  finalResponseContent = full;
+                  onContentDelta(delta, full);
+                },
+                onComplete: (result) => {
+                  console.log(`🔧 Tool results complete:`, {
+                    contentLength: result.content ? result.content.length : 0,
+                    hasToolCalls: !!(result.toolCalls && result.toolCalls.length > 0),
+                    toolCallsCount: result.toolCalls ? result.toolCalls.length : 0,
+                    contentPreview: result.content ? result.content.substring(0, 200) + '...' : 'NO CONTENT'
+                  });
+                  
+                  finalResponseContent = result.content || '';
+                  
+                  // Check if Claude wants to make more tool calls
+                  if (result.toolCalls && result.toolCalls.length > 0) {
+                    console.log(`🤖 AUTONOMOUS MODE: AI requested ${result.toolCalls.length} more tool calls`);
+                    shouldContinueLoop = true;
+                  } else if (finalResponseContent && finalResponseContent.length > 100 && toolCallsData.length > 0) {
+                    console.log(`🤖 AUTONOMOUS MODE: Substantial response received, completing task`);
+                    shouldContinueLoop = false;
+                  } else if (iteration >= this.maxIterations) {
+                    console.log(`🤖 AUTONOMOUS MODE: Reached max iterations, completing task`);
+                    shouldContinueLoop = false;
+                  } else {
+                    console.log(`🤖 AUTONOMOUS MODE: Continuing to next iteration`);
+                    shouldContinueLoop = true;
+                  }
+                  
+                  // For autonomous mode, accumulate content across iterations
+                  if (isAutonomousMode) {
+                    if (finalResponseContent && finalResponseContent.trim()) {
+                      accumulatedContent = accumulatedContent ? 
+                        accumulatedContent + '\n\n' + finalResponseContent : 
+                        finalResponseContent;
+                      console.log(`🤖 AUTONOMOUS MODE: Tool results processed, accumulated ${accumulatedContent.length} chars`);
+                      console.log(`🤖 AUTONOMOUS MODE: Accumulated content preview: "${accumulatedContent.substring(0, 200)}..."`);
+                    }
+                    
+                    // Check if the AI wants to make more tool calls
+                    if (result.toolCalls && result.toolCalls.length > 0) {
+                      console.log(`🤖 AUTONOMOUS MODE: AI requested ${result.toolCalls.length} more tool calls, will continue loop`);
+                      shouldContinueLoop = true;
+                    } else {
+                      // HYBRID SOLUTION: If we have a substantial response from the synthesis step, we're done
+                      console.log(`🤖 AUTONOMOUS MODE: No tool calls in synthesis response`);
+                      console.log(`🤖 AUTONOMOUS MODE: Response length: ${finalResponseContent ? finalResponseContent.length : 0}`);
+                      
+                      // If we have a good synthesis response (substantial content), complete the task
+                      if (finalResponseContent && finalResponseContent.length > 100 && toolCallsData.length > 0) {
+                        console.log(`🤖 AUTONOMOUS MODE: Substantial synthesis response received, completing task`);
+                        shouldContinueLoop = false;
+                      } else if (iteration < this.maxIterations && toolCallsData.length === 0) {
+                        console.log(`🤖 AUTONOMOUS MODE: No tool calls made yet, continuing to search`);
+                        shouldContinueLoop = true;
+                      } else if (iteration >= this.maxIterations) {
+                        console.log(`🤖 AUTONOMOUS MODE: Reached max iterations, completing task`);
+                        shouldContinueLoop = false;
+                      } else {
+                        console.log(`🤖 AUTONOMOUS MODE: Giving AI another chance to continue`);
+                        shouldContinueLoop = true;
+                      }
+                    }
+                  }
+                  
+                  // Don't complete here for autonomous mode - let the main loop handle continuation
+                  if (!isAutonomousMode) {
+                    onComplete({
+                      success: true,
+                      content: finalResponseContent,
+                      toolCalls: toolCallsData
+                    });
+                  }
+                },
+                onError: (error) => {
+                  console.error(`🔧 Context response error:`, error);
+                  onError(error);
+                }
+              });
+              
+              // For autonomous mode, check if we should continue
+              if (isAutonomousMode && iteration < this.maxIterations) {
+                if (shouldContinueLoop) {
+                  console.log(`🤖 AUTONOMOUS MODE: Continuing to iteration ${iteration + 1} with context`);
+                  continue;
+                } else {
+                  console.log(`🤖 AUTONOMOUS MODE: AI completed task. Final response length: ${finalResponseContent.length}`);
+                  console.log(`🤖 AUTONOMOUS MODE: Accumulated content length: ${accumulatedContent.length}`);
+                  
+                  // If we have no accumulated content but have final response content, use that
+                  const finalContent = accumulatedContent || finalResponseContent || 'Task completed with tool results.';
+                  
+                  onComplete({
+                    success: true,
+                    content: finalContent,
+                    toolCalls: toolCallsData
+                  });
+                  return;
+                }
+              } else if (isAutonomousMode) {
+                // Reached max iterations - force final synthesis
+                console.log(`🤖 AUTONOMOUS MODE: Reached max iterations, requesting final synthesis`);
+                
+                // Add a final synthesis prompt to force Claude to give a direct answer
+                const synthesisBuild = [...originalMessages];
+                synthesisBuild.push({
+                  role: 'user',
+                  content: 'Based on all the documentation you searched, provide a direct answer to the original question. Do not repeat the documentation. Give only your final answer.'
+                });
+                
+                console.log(`🤖 AUTONOMOUS MODE: Requesting final synthesis from Claude`);
+                
+                const finalSynthesis = await this.claudeService.streamChat(
+                  'Synthesize your findings and provide the final answer to the user\'s question.',
+                  {
+                    onContentDelta: (delta, full) => {
+                      // Filter out any remaining debug content
+                      const cleanDelta = delta.replace(/🔧.*?=====/g, '').replace(/Model: claude-sonnet.*?\n/g, '');
+                      if (cleanDelta.trim()) {
+                        onContentDelta(cleanDelta, full);
+                      }
+                    },
+                    onComplete: (result) => {
+                      const finalContent = result.content || 'Task completed with tool results.';
+                      onComplete({
+                        success: true,
+                        content: finalContent,
+                        toolCalls: toolCallsData
+                      });
+                    },
+                    onError: (error) => {
+                      console.error('🤖 AUTONOMOUS MODE: Final synthesis error:', error);
+                      const fallbackContent = accumulatedContent || finalResponseContent || 'Task completed with tool results.';
+                      onComplete({
+                        success: true,
+                        content: fallbackContent,
+                        toolCalls: toolCallsData
+                      });
+                    }
+                  }
+                );
+                return;
+              } else {
+                console.log(`✅ NON-AUTONOMOUS: Completed after tool results`);
+                return;
+              }
+              
+            } else {
+              // For non-Claude models, generate a response based on tool results
+              console.log('🔧 Processing tool results for non-Claude model');
+              
+              const toolResultsPrompt = this.buildFinalConversation(message, toolCallsData);
+              const finalResponse = await this.callAIFinal(toolResultsPrompt, model, {
+                onContentDelta: onContentDelta,
+                onComplete: (result) => {
+                  onComplete({
+                    success: true,
+                    content: result.content,
+                    toolCalls: toolCallsData
+                  });
+                },
+                onError: onError
+              });
+              
+              return; // Gemini handles the completion
+            }
+          }
+        } else if (isAutonomousMode && iteration < this.maxIterations) {
+          // Roo Code pattern: If no tools were used, assume the AI is done unless we haven't searched enough
+          console.log(`🤖 AUTONOMOUS MODE: No tools used in iteration ${iteration}.`);
+          
+          // Only continue if we haven't made any tool calls yet (AI might need to search first)
+          if (toolCallsData.length === 0) {
+            console.log(`🤖 AUTONOMOUS MODE: No searches made yet. Prompting for tool use...`);
+            
+            const noToolsMessage = `Please use the search_ae_documentation tool to find specific information about this topic, then provide a comprehensive answer based on the search results.`;
+            conversationPrompt = this.buildConversation(
+              `${message}\n\n${noToolsMessage}`, 
+              toolCallsData, 
+              this.maxIterations
+            );
+            
+            // Accumulate the content
+            accumulatedContent = accumulatedContent ? 
+              accumulatedContent + '\n\n' + decision.content : 
+              decision.content;
+            
+            continue; // Continue to next iteration
+          } else {
+            console.log(`🤖 AUTONOMOUS MODE: AI provided response without tools after searches. Task complete.`);
+          }
+        }
+      }
+      
+      // If we get here, we completed iterations without a final answer
+      onComplete({
+        success: true,
+        content: fullResponse || 'I completed the task but did not generate a specific response.',
+        toolCalls: toolCallsData
+      });
+      
+    } catch (error) {
+      console.error('❌ AI Router error:', error);
+      onError(error);
+    }
+  }
+
+  /**
+   * Call AI with tools based on model selection
+   */
+  async callAIWithTools(prompt, options = {}) {
+    const { model = 'claude', onContentDelta, onToolCall } = options;
+    
+    if (model === 'claude') {
+      const tools = this.claudeService.getDefaultTools();
+      const systemPrompt = this.claudeService.getSystemPrompt(prompt);
+      
+      return await this.claudeService.streamChat(prompt, {
+        systemPrompt,
+        tools,
+        onContentDelta,
+        onToolCall,
+        onComplete: (result) => result,
+        onError: (error) => ({ success: false, error: error.message })
+      });
+    } else {
+      // Gemini or other models
+      return await this.geminiService.streamChat(prompt, {
+        model: model === 'gemini-1.5-flash' ? 'gemini-1.5-flash' : 'gemini-2.0-flash-exp',
+        onContentDelta,
+        onToolCall,
+        onComplete: (result) => result,
+        onError: (error) => ({ success: false, error: error.message })
+      });
+    }
+  }
+
+  /**
+   * Call AI for final response generation
+   */
+  async callAIFinal(prompt, model = 'claude', options = {}) {
+    const { onContentDelta, onComplete, onError } = options;
+    
+    if (model === 'claude') {
+      return await this.claudeService.streamChat(prompt, {
+        systemPrompt: '',
+        tools: [],
+        onContentDelta,
+        onComplete,
+        onError
+      });
+    } else {
+      return await this.geminiService.generateFinalResponse(prompt, {
+        model: model === 'gemini-1.5-flash' ? 'gemini-1.5-flash' : 'gemini-2.0-flash-exp',
+        onContentDelta,
+        onComplete,
+        onError
+      });
+    }
+  }
+
+  /**
+   * Build conversation from history array for autonomous mode
+   */
+  buildConversationFromHistory(conversationHistory) {
+    return conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+  }
+
+  /**
+   * Build conversation context
+   */
+  buildConversation(userMessage, toolResults = [], iteration = 1) {
+    // Check if this is autonomous agent mode
+    const isAutonomousMode = userMessage.includes('AUTONOMOUS AGENT MODE:');
+    
+    const baseSystemPrompt = `You are Cursor, an AI assistant paired with a human software engineer. You are helping them with After Effects ExtendScript development.
+
+You have access to a comprehensive After Effects documentation search tool that can find specific API information, code examples, and technical details.`;
+
+    const autonomousInstructions = isAutonomousMode ? `
+
+You are Roo, a knowledgeable technical assistant focused on answering questions about After Effects ExtendScript development. 
+
+You can analyze code, explain concepts, and access comprehensive After Effects documentation through search tools. Always answer the user's questions thoroughly using the available documentation search tools when you need specific information.
+
+Use the search_ae_documentation tool when you need to find specific API details, code examples, or technical information about After Effects scripting. After searching, provide comprehensive answers based on what you've found.
+
+` : `
+
+<important>
+You should proactively use the documentation search tool for most After Effects technical questions to provide accurate, detailed information with specific API details and code examples.
+
+For simple questions like "hi", "hello", "thanks", respond directly without using tools.
+For technical questions about After Effects, including specific terms, API names, effect names, property names (like "adbe glo2"), layers, effects, compositions, scripting, etc., you should search the documentation when you need specific details.
+
+Default approach for technical questions:
+- Search documentation when users mention specific After Effects terms or concepts that need verification
+- Search multiple times with different queries to ensure comprehensive coverage
+- Provide specific API details, code examples, and accurate information from the documentation
+- If you can't find something after searching, then mention it wasn't found in the documentation
+</important>`;
+
+    const toolInstructions = `
+
+<tool_instructions>
+Use the search_ae_documentation tool for After Effects technical questions when you need specific details. Examples:
+- User asks about "layers" → Search for layer creation, layer properties, layer types
+- User asks about "effects" → Search for adding effects, effect properties, effect removal  
+- User asks about "adbe glo2" → Search for "adbe glo2", "glow effect", "effect match names"
+- User asks about specific terms → Search for that exact term and related concepts
+- User asks for help with After Effects scripting → Search for relevant APIs and examples
+
+When using the search_ae_documentation tool:
+1. Search strategically - only when you need specific API details you don't already have
+2. The search results provide you with documentation content that the user cannot see - use this information to give comprehensive answers
+3. After each search, IMMEDIATELY incorporate the results into your response based on the documentation content you receive
+4. The user only sees your final response, not the search results themselves, so synthesize the information clearly
+5. Focus on providing comprehensive answers using the search results, not on searching more
+6. Stop searching once you have sufficient information to answer the user's question
+7. Prioritize quality synthesis of results over quantity of searches
+</tool_instructions>`;
+
+    const systemPrompt = baseSystemPrompt + autonomousInstructions + toolInstructions + `
+
+Current message: ${userMessage}
+
+${toolResults.length > 0 ? `<tool_results>
+Previous documentation searches in this conversation:
+${toolResults.map(tr => `
+Search: ${tr.toolCall.query}
+Results: ${tr.result.success ? `Found ${tr.result.resultCount || 0} relevant sections` : 'Failed'}
+${tr.result.documentation ? `Documentation: ${tr.result.documentation.substring(0, 200)}...` : ''}
+`).join('\n')}
+</tool_results>` : ''}
+
+Respond naturally and helpfully. If you need to search the documentation, use the search_ae_documentation tool. Otherwise, provide a direct response.`;
+
+    return systemPrompt;
+  }
+
+  /**
+   * Build final conversation with tool results
+   */
+  buildFinalConversation(userMessage, toolResults = []) {
+    return `You are an expert After Effects ExtendScript assistant. Based on the documentation searches performed, provide a comprehensive and helpful response.
+
+User's question: ${userMessage}
+
+Documentation found:
+${toolResults.map(tr => {
+  return `
+Query: ${tr.toolCall.query}
+${tr.result && tr.result.success ? `Documentation: ${tr.result.documentation || tr.result.content || 'No content available'}` : 'No results found'}
+`;
+}).join('\n')}
+
+Provide a complete, helpful response based on the documentation found. Include specific code examples and API references when relevant.`;
+  }
+
+  /**
+   * Test all services
+   */
+  async testServices() {
+    const results = {
+      rag: await this.ragService.testConnection(),
+      claude: { success: !!process.env.CLAUDE_API_KEY },
+      gemini: { success: !!process.env.GEMINI_API_KEY }
+    };
+    
+    return results;
+  }
+}
+
+module.exports = AIRouterService;

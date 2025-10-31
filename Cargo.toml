@@ -1,0 +1,32 @@
+[package]
+name = "maximise-ae-tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "1.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4.4", features = ["derive"] }
+thiserror = "1.0"
+lazy_static = "1.4"
+swc_ecma_parser = "0.146"
+swc_ecma_ast = "0.115"
+swc_common = "0.33"
+walkdir = "2.4"
+strsim = "0.11.0"
+itertools = "0.10"
+html-escape = "0.2"
+anyhow = "1.0"
+
+[lib]
+name = "ae_script_validator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ae-validator"
+path = "src/main.rs" 
+
+[dev-dependencies]
+criterion = "0.5"
+test-case = "3.3" 

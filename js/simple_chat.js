@@ -1,0 +1,1 @@
+../public/js/simple_chat.js

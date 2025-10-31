@@ -1,0 +1,55 @@
+{
+  "timestamp": "2025-07-14T00:54:46.258Z",
+  "toolCall": {
+    "name": "search_ae_documentation",
+    "id": "toolu_019v8bh2RajmVRtPZbkmkhEv",
+    "query": "Layer object properties methods"
+  },
+  "toolResult": {
+    "success": true,
+    "resultCount": 5,
+    "documentationLength": 1538,
+    "documentation": "---\n\n## Methods\n\n### PropertyGroup.addProperty()\n\n`app.project.item(index).layer(index).propertyGroupSpec.addProperty(name)`\n\n#### Description\n\nCreates and returns a PropertyBase object with the specified name, and adds it to this group.\n\nIn general, you can only add properties to an indexed group (a property group that has the type `PropertyType.INDEXED_GROUP`; see [PropertyBase.propertyType](propertybase.md#propertybasepropertytype)).\nThe only exception is a text animator property, which can be added to a named group (a property group that has the type `PropertyType.NAMED_GROUP`).\n\nIf this method cannot create a property with the specified name, it generates an exception.\n\nTo check that you can add a particular property to this group, call `canAddProperty` before calling this method. (See [PropertyGroup.canAddProperty()](#propertygroupcanaddproperty).)\n\n!!! warning\n    When you add a new property to an indexed group, the indexed group gets recreated from scratch, invalidating all existing references to properties.\n\nOne workaround is to store the index of the added property with property.propertyIndex.\n\n#### Examples\n\nThis won't work, as the slider object becomes invalid once we add the Color Control property:\n\nThis revised method will work:\n\n#### Parameters\n\n+-----------+--------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n[Content truncated due to length...]"
+  },
+  "claudeRequest": {
+    "model": "claude-sonnet-4-20250514",
+    "max_tokens": 8192,
+    "temperature": 0.7,
+    "stream": false,
+    "system": "Answer the user question based on the tool results provided. Keep your response concise but helpful.",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What are the different types of layers in After Effects? Please quote specific documentation about Layer, AVLayer, and TextLayer objects with their exact descriptions and properties."
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "I'll search for information about layers in After Effects ExtendScript to give you a comprehensive overview."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_019v8bh2RajmVRtPZbkmkhEv",
+            "name": "search_ae_documentation",
+            "input": {
+              "query": "Layer object properties methods"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_019v8bh2RajmVRtPZbkmkhEv",
+            "content": "---\n\n## Methods\n\n### PropertyGroup.addProperty()\n\n`app.project.item(index).layer(index).propertyGroupSpec.addProperty(name)`\n\n#### Description\n\nCreates and returns a PropertyBase object with the specified name, and adds it to this group.\n\nIn general, you can only add properties to an indexed group (a property group that has the type `PropertyType.INDEXED_GROUP`; see [PropertyBase.propertyType](propertybase.md#propertybasepropertytype)).\nThe only exception is a text animator property, which can be added to a named group (a property group that has the type `PropertyType.NAMED_GROUP`).\n\nIf this method cannot create a property with the specified name, it generates an exception.\n\nTo check that you can add a particular property to this group, call `canAddProperty` before calling this method. (See [PropertyGroup.canAddProperty()](#propertygroupcanaddproperty).)\n\n!!! warning\n    When you add a new property to an indexed group, the indexed group gets recreated from scratch, invalidating all existing references to properties.\n\nOne workaround is to store the index of the added property with property.propertyIndex.\n\n#### Examples\n\nThis won't work, as the slider object becomes invalid once we add the Color Control property:\n\nThis revised method will work:\n\n#### Parameters\n\n+-----------+--------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n[Content truncated due to length...]"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "This is the complete request that causes Claude to return empty content"
+}
